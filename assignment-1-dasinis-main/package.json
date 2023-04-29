@@ -1,0 +1,19 @@
+{
+  "name": "assignment-1-dasinis",
+  "version": "1.0.0",
+  "description": "Setting server yelp-like application",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon server.js",
+    "start" : "node index.js"
+  },
+  "author": "Sushma <dasinis@oregonstate.edu>",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
