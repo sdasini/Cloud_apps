@@ -3,17 +3,20 @@ const router = require("express").Router();
 exports.router = router;
 const { getDbReference } = require("../lib/mongo");
 const { ReviewSchema } = require("../models/review");
-const { UserSchema, insertNewUser } = require("../models/user");
-const {validateAgainstSchema, extractValidFields} = require("../lib/validation");
+const { UserSchema, insertNewUser, validateUser } = require("../models/user");
+const {
+  validateAgainstSchema,
+  extractValidFields,
+} = require("../lib/validation");
 const { ObjectId } = require("mongodb");
+const { isAdmin, requireAuthentication, generateAuthToken } = require("../lib/auth");
 
-router.get("/", async function (req, res, next) {
+router.get("/", isAdmin, async function (req, res, next) {
   try {
     const db = getDbReference();
     const collection = db.collection("users");
 
-    const user = await collection.find()
-    .toArray();
+    const user = await collection.find().toArray();
     if (user) {
       res.status(200).json(user);
     } else {
@@ -33,7 +36,7 @@ router.get("/", async function (req, res, next) {
   // }
 });
 
-router.get("/:userID", async function (req, res, next) {
+router.get("/:userID", requireAuthentication, async function (req, res, next) {
   const id = req.params.userID;
   const db = getDbReference();
   const collection = db.collection("users");
@@ -44,6 +47,7 @@ router.get("/:userID", async function (req, res, next) {
         _id: new ObjectId(id),
       })
       .toArray();
+      results[0].password = "********"
     if (results.length !== 0) {
       res.status(200).send(results[0]);
     } else {
@@ -61,29 +65,29 @@ router.get("/:userID", async function (req, res, next) {
 /*
  * Route to list all of a user's businesses.
  */
-router.get("/:userid/businesses", async function (req, res) {
-  const userid = parseInt(req.params.userid);
-  const db = getDbReference();
-  const collection = db.collection("businesses");
-  const results = await collection
-    .find({
-      ownerid: userid,
-    })
-    .toArray();
-  if (results.length !== 0) {
-    res.status(200).send(results);
-  } else {
-    res.status(400).json({
-      error: "User doesn't exist. Request a valid userID",
-    });
-  }
-});
+// router.get("/:userid/businesses", async function (req, res) {
+//   const userid = req.params.userid;
+//   const db = getDbReference();
+//   const collection = db.collection("businesses");
+//   const results = await collection
+//     .find({
+//       ownerid: userid,
+//     })
+//     .toArray();
+//   if (results.length !== 0) {
+//     res.status(200).send(results);
+//   } else {
+//     res.status(400).json({
+//       error: "User doesn't exist. Request a valid userID",
+//     });
+//   }
+// });
 
 /*
  * Route to list all of a user's reviews.
  */
-router.get("/:userid/reviews", async function (req, res) {
-  const userid = parseInt(req.params.userid);
+router.get("/:userid/reviews", requireAuthentication, async function (req, res) {
+  const userid = req.params.userid;
   const db = getDbReference();
   const collection = db.collection("reviews");
   const results = await collection
@@ -103,8 +107,8 @@ router.get("/:userid/reviews", async function (req, res) {
 /*
  * Route to list all of a user's photos.
  */
-router.get("/:userid/photos", async function (req, res) {
-  const userid = parseInt(req.params.userid);
+router.get("/:userid/photos", requireAuthentication,  async function (req, res) {
+  const userid = req.params.userid;
   const db = getDbReference();
   const collection = db.collection("photos");
   const results = await collection
@@ -122,10 +126,9 @@ router.get("/:userid/photos", async function (req, res) {
 });
 
 // POSTS
-router.post("/", async (req, res, next) => {
+router.post("/", isAdmin, async (req, res, next) => {
   if (validateAgainstSchema(req.body, UserSchema)) {
     try {
-
       const id = await insertNewUser(req.body);
       res.status(201).send({
         id: id,
@@ -140,10 +143,32 @@ router.post("/", async (req, res, next) => {
   }
 });
 
+// Login to user /Admin
+router.post("/login", async (req, res, next) => {
+  if (req.body && req.body.id && req.body.password) {
+    try {
+      const authenticated = await validateUser(req.body.id, req.body.password);
+      // console.log(authenticated)
+      if (authenticated) {
+        console.log("token")
+        const token = await generateAuthToken(req.body.id);
+        console.log(token)
+        res.status(200).send({ token: token });
+      } else {
+        res.sendStatus(401);
+      }
+    } catch (e) {
+      next(e);
+    }
+  } else {
+    res.status(400).send({ error: "Request body needs id and password" });
+  }
+});
+
 /*
  * Route to modify data.
  */
-router.put("/:userID", async function (req, res, next) {
+router.put("/:userID", requireAuthentication, async function (req, res, next) {
   const id = req.params.userID;
   if (ObjectId.isValid(id)) {
     const db = getDbReference();
@@ -153,19 +178,19 @@ router.put("/:userID", async function (req, res, next) {
         _id: new ObjectId(id),
       })
       .toArray();
-      const fields = extractValidFields(req.body, UserSchema);
-      // console.log(fields.ownerid, results[0].ownerid);
-      if (results.length !== 0 && fields.ownerid === results[0].ownerid) {
-        const results = await collection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: fields }
-        );
-        res.status(201).json({
-          ModifiedCount: results.modifiedCount,
-        });
-      } else {
-        res.status(403).json({ error: "Cannot find ID. OR Invalid OwnerID" });
-      }
+    const fields = extractValidFields(req.body, UserSchema);
+    // console.log(fields.ownerid, results[0].ownerid);
+    if (results.length !== 0 && fields.ownerid === results[0].ownerid) {
+      const results = await collection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: fields }
+      );
+      res.status(201).json({
+        ModifiedCount: results.modifiedCount,
+      });
+    } else {
+      res.status(403).json({ error: "Cannot find ID. OR Invalid OwnerID" });
+    }
   } else {
     res.status(400).json({
       error: "Invalid Object ID",
