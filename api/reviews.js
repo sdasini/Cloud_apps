@@ -1,10 +1,12 @@
 const router = require("express").Router();
 const { ObjectId } = require("mongodb");
-const { getDb } = require("../lib/mongo");
+const { getDbReference } = require("../lib/mongo");
 const {
   validateAgainstSchema,
   extractValidFields,
 } = require("../lib/validation");
+
+const { ReviewSchema } = require("../models/review");
 
 // const reviews = require('../data/reviews');
 
@@ -14,18 +16,11 @@ exports.router = router;
 /*
  * Schema describing required/optional fields of a review object.
  */
-const reviewSchema = {
-  userid: { required: true },
-  businessid: { required: true },
-  dollars: { required: true },
-  stars: { required: true },
-  review: { required: false },
-};
 
 // Get all the reviews
 router.get("/", async function (req, res) {
   // declare collection
-  const db = getDb();
+  const db = getDbReference();
   const collection = db.collection("reviews");
   /*
    * Compute page number based on optional query string parameter `page`.
@@ -53,9 +48,9 @@ router.get("/", async function (req, res) {
  * Route to create a new review.
  */
 router.post("/", async function (req, res, next) {
-  if (validateAgainstSchema(req.body, reviewSchema)) {
-    const review = extractValidFields(req.body, reviewSchema);
-    const db = getDb();
+  if (validateAgainstSchema(req.body, ReviewSchema)) {
+    const review = extractValidFields(req.body, ReviewSchema);
+    const db = getDbReference();
     const collection = db.collection("reviews");
     /*
      * Make sure the user is not trying to review the same business twice.
@@ -91,7 +86,7 @@ router.post("/", async function (req, res, next) {
  */
 router.get("/:reviewID", async function (req, res, next) {
   const id = req.params.reviewID;
-  const db = getDb();
+  const db = getDbReference();
   const collection = db.collection("reviews");
 
   if (ObjectId.isValid(id)) {
@@ -120,14 +115,14 @@ router.get("/:reviewID", async function (req, res, next) {
 router.put("/:reviewID", async function (req, res, next) {
   const id = req.params.reviewID;
   if (ObjectId.isValid(id)) {
-    const db = getDb();
+    const db = getDbReference();
     const collection = db.collection("reviews");
     const results = await collection
       .find({
         _id: new ObjectId(id),
       })
       .toArray();
-    const fields = extractValidFields(req.body, reviewSchema);
+    const fields = extractValidFields(req.body, ReviewSchema);
     if (results.length !== 0) {
       const results = await collection.updateOne(
         { _id: new ObjectId(id) },
@@ -152,7 +147,7 @@ router.put("/:reviewID", async function (req, res, next) {
 router.delete("/:reviewID", async function (req, res, next) {
   const id = req.params.reviewID;
   if (ObjectId.isValid(id)) {
-    const db = getDb();
+    const db = getDbReference();
     const collection = db.collection("reviews");
     const query = { _id: new ObjectId(id) };
     const results = await collection.deleteOne(query);

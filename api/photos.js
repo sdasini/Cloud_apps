@@ -3,31 +3,32 @@ const {
   validateAgainstSchema,
   extractValidFields,
 } = require("../lib/validation");
+const multer = require("multer"); //to accept multipart form data.
+const crypto = require("node:crypto"); //generate random bytes.
+const {
+  PhotoSchema,
+  insertNewPhoto,
+  getPhotoById,
+  saveImageInfo,
+  saveImageFile,
+  getImageDownloadStreamByFilename,
+} = require("../models/photo");
 
-// const photos = require('../data/photos');
-const { getDb } = require("../lib/mongo");
+const { getDbReference } = require("../lib/mongo");
 const { ObjectId } = require("mongodb");
 
 exports.router = router;
-// exports.photos = photos;
-
-/*
- * Schema describing required/optional fields of a photo object.
- */
-const photoSchema = {
-  userid: { required: true },
-  businessid: { required: true },
-  caption: { required: false },
-};
 
 router.get("/", async function (req, res) {
   // declare collection
-  const db = getDb();
+  const db = getDbReference();
   const collection = db.collection("photos");
-  let page = parseInt(req.query.page) || 1;
-  page = Math.max(1, page);
-  const pageSize = 5;
-  // const lastPage = Math.ceil(1, page);
+  const count = await collection.countDocuments();
+  page = parseInt(req.query.page) || 1;
+  const pageSize = 10;
+  const lastPage = Math.ceil(count / pageSize);
+  page = page > lastPage ? lastPage : page;
+  page = page < 1 ? 1 : page;
   const offset = (page - 1) * pageSize;
 
   const results = await collection
@@ -38,14 +39,18 @@ router.get("/", async function (req, res) {
     .toArray();
   res.status(200).json({
     photos: results,
+    page: page,
+    totalPages: lastPage,
+    pageSize: pageSize,
+    count: count,
   });
 });
 /*
  * Route to create a new photo.
  */
 router.post("/", async function (req, res, next) {
-  if (validateAgainstSchema(req.body, photoSchema)) {
-    const db = getDb();
+  if (validateAgainstSchema(req.body, PhotoSchema)) {
+    const db = getDbReference();
     const collection = db.collection("photos");
     const result = await collection.insertOne({
       ...req.body,
@@ -67,7 +72,7 @@ router.post("/", async function (req, res, next) {
  */
 router.get("/:photoID", async function (req, res, next) {
   const id = req.params.photoID;
-  const db = getDb();
+  const db = getDbReference();
   const collection = db.collection("photos");
 
   if (ObjectId.isValid(id)) {
@@ -96,14 +101,14 @@ router.get("/:photoID", async function (req, res, next) {
 router.put("/:photoID", async function (req, res, next) {
   const id = req.params.photoID;
   if (ObjectId.isValid(id)) {
-    const db = getDb();
+    const db = getDbReference();
     const collection = db.collection("photos");
     const results = await collection
       .find({
         _id: new ObjectId(id),
       })
       .toArray();
-    const fields = extractValidFields(req.body, photoSchema);
+    const fields = extractValidFields(req.body, PhotoSchema);
 
     if (results.length !== 0) {
       const results = await collection.updateOne(
@@ -129,7 +134,7 @@ router.put("/:photoID", async function (req, res, next) {
 router.delete("/:photoID", async function (req, res, next) {
   const id = req.params.photoID;
   if (ObjectId.isValid(id)) {
-    const db = getDb();
+    const db = getDbReference();
     const collection = db.collection("photos");
     const query = { _id: new ObjectId(id) };
     const results = await collection.deleteOne(query);
