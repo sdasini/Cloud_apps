@@ -1,0 +1,36 @@
+version: "1.0"
+services:
+  app:
+    container_name: yelp-clone-express-app
+    image: node:18
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - |
+        npm install && 
+        npm run initdb && 
+        npm run dev
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - .:/usr/src/app
+    working_dir: /usr/src/app
+
+  db:
+    container_name: yelp-clone-mongo-server
+    image: mysql:latest
+    restart: always
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    ports:
+      - "3306:3306"
