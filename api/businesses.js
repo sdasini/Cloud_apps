@@ -9,7 +9,6 @@ const { ObjectId } = require("mongodb");
 const { BusinessSchema, getBusinessById, getBusinessesPage, insertNewBusiness } = require("../models/business");
 
 exports.router = router;
-// exports.businesses = businesses;
 
 /*
  * Route to return a list of businesses.
